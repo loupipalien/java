@@ -185,6 +185,12 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * when overpopulated. However, since the vast majority of bins in
      * normal use are not overpopulated, checking for existence of
      * tree bins may be delayed in the course of table methods.
+     * 此 map 通常可视为一个箱装的哈希表, 但当箱子数变得很大时, 它们会被转换为
+     * TreeNodes 中的箱子, 类似于 java.util.TreeMap 中的结构. 大多数方法试图
+     * 使用普通的箱子, 但当应用时都转移为调用 TreeNode 的方法 (通过简单的检查是否
+     * 是一个 TreeNode 实例). TreeNodes 的箱子可以被遍历并且可以像其他容器被使用,
+     * 但在过度装载时还额外支持快速查找. 然而, 由于正常使用的情况下绝大多数箱子都没有
+     * 被过度装载, 在哈希表方法调用过程中检查树箱是否存在可能会被延迟
      *
      * Tree bins (i.e., bins whose elements are all TreeNodes) are
      * ordered primarily by hashCode, but in the case of ties, if two
