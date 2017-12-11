@@ -186,9 +186,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * normal use are not overpopulated, checking for existence of
      * tree bins may be delayed in the course of table methods.
      * 此 map 通常可视为一个箱装的哈希表, 但当箱子数变得很大时, 它们会被转换为
-     * TreeNodes 中的箱子, 类似于 java.util.TreeMap 中的结构. 大多数方法试图
+     * TreeNodes 组成的箱子中, 类似于 java.util.TreeMap 中的结构. 大多数方法试图
      * 使用普通的箱子, 但当应用时都转移为调用 TreeNode 的方法 (通过简单的检查是否
-     * 是一个 TreeNode 实例). TreeNodes 的箱子可以被遍历并且可以像其他容器被使用,
+     * 是一个 TreeNode 实例). TreeNodes 组成的箱子可以被遍历并且可以像其他容器被使用,
      * 但在过度装载时还额外支持快速查找. 然而, 由于正常使用的情况下绝大多数箱子都没有
      * 被过度装载, 在哈希表方法调用过程中检查树箱是否存在可能会被延迟
      *
@@ -209,6 +209,15 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * precautions. But the only known cases stem from poor user
      * programming practices that are already so slow that this makes
      * little difference.)
+     * 树箱 (即, 箱中的元素都是 TreeNode) 初始是按 hashCode 排序的, 但在这种情况
+     * 下, 如果两个元素都是 "class C implements Comparable<C>" 类型, 并且它们
+     * 的 compareTo 方法用于排序. (我们通过反射检查泛型类型来校验者一点 -- 见方法
+     * comparableClassFor). 当键有不同的哈希值或者是可比较的时增加树箱的复杂度在
+     * 最坏的情况 0(log n) 下操作时有价值的, 这样, 当在意外或恶意的使用下 hashCode()
+     * 方法返回的值分布性很差时, 即其中的多个键共享一个 hashCode 时性能会有不明显的降低,
+     * 既是它们时可比较的. 如果两者都不是适用, 我们可能浪费了时间和空间上的两个因素并且没有
+     * 任何预防措施. 但唯一确定的案例是来自糟糕的用户编程实践, 这些实践已经很慢了以至于没有
+     * 什么区别
      *
      * Because TreeNodes are about twice the size of regular nodes, we
      * use them only when bins contain enough nodes to warrant use
@@ -223,7 +232,6 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * resizing granularity. Ignoring variance, the expected
      * occurrences of list size k are (exp(-0.5) * pow(0.5, k) /
      * factorial(k)). The first values are:
-     *
      * 0:    0.60653066
      * 1:    0.30326533
      * 2:    0.07581633
@@ -234,11 +242,30 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * 7:    0.00000094
      * 8:    0.00000006
      * more: less than 1 in ten million
+     * 因为 TreeNodes 大约是常规节点数的两倍, 我们只在箱中包含了足够多的节点时才去适用
+     * 它们 (见 TREEIFY_THRESHOLD). 当它们变得很小时 (由于移除或调整大小) 它们会被
+     * 转变为普通箱子. 在有分布良好的用户 hashCodes, 树箱很少被用到. 理想地, 在随机
+     * hashCodes 情况下, 在调整大小的阈值为 0.75 时, 在箱中的节点遵循一个平均参数为
+     * 0.5 的泊松分布 (http://en.wikipedia.org/wiki/Poisson_distribution),
+     * 尽管调整大小的阈值粒度有一个大的方差. 忽略方差, 列表大小 k 的期望值是
+     * (exp(-0.5) * pow(0.5, k) / factorial(k)). 第一个值是:
+     * 0:    0.60653066
+     * 1:    0.30326533
+     * 2:    0.07581633
+     * 3:    0.01263606
+     * 4:    0.00157952
+     * 5:    0.00015795
+     * 6:    0.00001316
+     * 7:    0.00000094
+     * 8:    0.00000006
+     * 更大: 在一千万时也小于 1
      *
      * The root of a tree bin is normally its first node.  However,
      * sometimes (currently only upon Iterator.remove), the root might
      * be elsewhere, but can be recovered following parent links
      * (method TreeNode.root()).
+     * 通常树箱的根是它的第一个元素. 然而有时 (目前只在 Iterator.remove), 根可能
+     * 在其他地方, 但是顺着父节点的连接 (方法 TreeNode.root())可以被复原
      *
      * All applicable internal methods accept a hash code as an
      * argument (as normally supplied from a public method), allowing
@@ -246,6 +273,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * Most internal methods also accept a "tab" argument, that is
      * normally the current table, but may be a new or old one when
      * resizing or converting.
+     * 所有应用的内部方法接收一个哈希码作为参数 (通常由公共方法提供), 允许它们
+     * 互相调用而不用重新计算 hashCodes. 大多数内部方法也接收一个 "tab" 参数,
+     * 通常是当前的表, 但当调整大小或转换时可能时一个新的或旧的表
      *
      * When bin lists are treeified, split, or untreeified, we keep
      * them in the same relative access/traversal order (i.e., field
@@ -255,6 +285,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * total ordering (or as close as is required here) across
      * rebalancings, we compare classes and identityHashCodes as
      * tie-breakers.
+     * 当箱列表被树化, 切分, 或非树化, 我们都保持它们有同样的相对访问/遍历顺序
+     * (即, fieldNode.next) 去就地保存, 并且在调用 iterator.remove 时稍微
+     * 简化处理切分和遍历. 当插入时使用比较器, 去通过重平衡保持整体顺序 (或像在
+     * 这里需要一样), 我们将类和标识码作为连接符
      *
      * The use and transitions among plain vs tree modes is
      * complicated by the existence of subclass LinkedHashMap. See
@@ -263,25 +297,33 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * otherwise remain independent of these mechanics. (This also
      * requires that a map instance be passed to some utility methods
      * that may create new nodes.)
+     * 普通模式或树模式之间使用或转换在已存在的子类 LinkedHashMap 中都是兼容的.
+     * 见下面在插入, 移除, 访问时允许 LinkdeHashMap 内部调用的钩子方法或者保持
+     * 它们的独立机制. (这也要求一个 map 实例被传递一些创建新节点的工具方法)
      *
      * The concurrent-programming-like SSA-based coding style helps
      * avoid aliasing errors amid all of the twisty pointer operations.
+     * 基于 SSA 的类并发程序编码风格有助于在所有恶心的指针操作中避免容易混淆的错误
      */
 
     /**
      * The default initial capacity - MUST be a power of two.
+     * 默认的初始容量 (也就是 16) - 必须是 2 的幂
      */
-    static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
+    static final int DEFAULT_INITIAL_CAPACITY = 1 << 4;
 
     /**
      * The maximum capacity, used if a higher value is implicitly specified
      * by either of the constructors with arguments.
      * MUST be a power of two <= 1<<30.
+     * 最大容量, 如果由带参的构造函数隐式的指定一个更高的值则使用
+     * 必须是 2 的幂 <= 1 << 30
      */
     static final int MAXIMUM_CAPACITY = 1 << 30;
 
     /**
      * The load factor used when none specified in constructor.
+     * 当构造函数中未指定时使用的装载因子
      */
     static final float DEFAULT_LOAD_FACTOR = 0.75f;
 
@@ -292,6 +334,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * than 2 and should be at least 8 to mesh with assumptions in
      * tree removal about conversion back to plain bins upon
      * shrinkage.
+     * 使用树而不是箱的列表的箱数阈值. 当添加一个元素到只有有这么多个节点的箱中时,
+     * 箱会被转换未树. 这个值必须大于 2 并且至少应该是 8, 以符合当树中移除节点而
+     * 转换回普通箱时的收缩假设
      */
     static final int TREEIFY_THRESHOLD = 8;
 
@@ -299,6 +344,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * The bin count threshold for untreeifying a (split) bin during a
      * resize operation. Should be less than TREEIFY_THRESHOLD, and at
      * most 6 to mesh with shrinkage detection under removal.
+     * 在调整大小的操作中非树化一个 (切分) 箱的箱数阈值. 应当小于 TREEIFY_THRESHOLD,
+     * 并且至多是 6, 以符合在移除时的收缩检测
      */
     static final int UNTREEIFY_THRESHOLD = 6;
 
@@ -307,12 +354,16 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * (Otherwise the table is resized if too many nodes in a bin.)
      * Should be at least 4 * TREEIFY_THRESHOLD to avoid conflicts
      * between resizing and treeification thresholds.
+     * 对于被树化的箱子的最小表容量. (如果在一个箱中有很多节点, 这个表会被调整大小)
+     * 至少应该是 4 * TREEIFY_THRESHOLD, 以避免重新调整大小时和树化阈值冲突
      */
     static final int MIN_TREEIFY_CAPACITY = 64;
 
     /**
      * Basic hash bin node, used for most entries.  (See below for
      * TreeNode subclass, and in LinkedHashMap for its Entry subclass.)
+     * 基础的哈希箱节点, 被用于大多数条目. (见以下 TreeNode 子类, 和在 LinkedHashMap
+     * 中的 Entry 子类)
      */
     static class Node<K,V> implements Map.Entry<K,V> {
         final int hash;
@@ -327,28 +378,44 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             this.next = next;
         }
 
-        public final K getKey()        { return key; }
-        public final V getValue()      { return value; }
-        public final String toString() { return key + "=" + value; }
+        @Override
+        public final K getKey() {
+            return key;
+        }
 
+        @Override
+        public final V getValue() {
+            return value;
+        }
+
+        @Override
+        public final String toString() {
+            return key + "=" + value;
+        }
+
+        @Override
         public final int hashCode() {
             return Objects.hashCode(key) ^ Objects.hashCode(value);
         }
 
+        @Override
         public final V setValue(V newValue) {
             V oldValue = value;
             value = newValue;
             return oldValue;
         }
 
+        @Override
         public final boolean equals(Object o) {
-            if (o == this)
+            if (o == this) {
                 return true;
+            }
             if (o instanceof Map.Entry) {
-                Map.Entry<?,?> e = (Map.Entry<?,?>)o;
-                if (Objects.equals(key, e.getKey()) &&
-                    Objects.equals(value, e.getValue()))
+                // TODO 泛型 <?,?> 为什么不写为 <K,V>
+                Map.Entry<?,?> e = (Map.Entry<?,?>) o;
+                if (Objects.equals(key, e.getKey()) && Objects.equals(value, e.getValue())) {
                     return true;
+                }
             }
             return false;
         }
@@ -371,6 +438,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * cheapest possible way to reduce systematic lossage, as well as
      * to incorporate impact of the highest bits that would otherwise
      * never be used in index calculations because of table bounds.
+     *
      */
     static final int hash(Object key) {
         int h;
