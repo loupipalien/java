@@ -11,6 +11,8 @@
 
   <modules>
     <module>java-jdk</module>
+      <module>java-demo</module>
+      <module>java-jvm</module>
   </modules>
 
   <properties>
