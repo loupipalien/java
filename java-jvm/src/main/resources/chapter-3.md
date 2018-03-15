@@ -150,3 +150,11 @@ TODO...
 再往后的 "0.0025925 secs" 表示该内存区域 GC 所占用的时间, 单位是秒; 有的收集器会给出更具体的时间数据, 如 "[Times: user=0.01 sys=0.00, real=0.02 secs]", 这里的 user, sys, real 与 Linux 的 time 命令输出的时间含义一致, 分别代表用户态消耗的 CPU 时间, 内核态消耗的 CPU 时间和操作从开始到结束所经过的墙钟时间 (Wall Clock Time); CPU 时间和墙钟时间的区别是, 墙钟时间包括各种非运算的等待耗时, 例如等待磁盘 I/O, 等待线程阻塞, 而 CPU 时间不包括这些耗时, 但当系统有多 CPU 或者多核的话, 多线程操作会叠加这些 CPU 时间, 所以可能看到 user 或 sys 时间超过 real 时间  
 
 ##### 垃圾收集器参数总结
+JDK 1.7 中各种垃圾收集器相关的常用参数整理如下
+
+|参数|描述|
+|-|-|
+|UseSerialGC|虚拟机运行在 Client 模式下的默认值, 打开此开关后, 使用 Serail + Serail Old 的收集器组合进行内存回收|
+|UseParNewGC|打开此开关后, 使用 ParNew + Serial Old 的收集器组合进行内存回收|
+|UseConcMarkSweepGC|打开此开关后, 使用 ParNew + CMS + Serial Old 的收集器组合进行内存回收; Serail Old 收集器将作为 CMS 收集器出现 Concurrent Mode Failure 失败后的后备收集器使用|
+|UseParallelGC||
