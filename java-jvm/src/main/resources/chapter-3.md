@@ -157,4 +157,4 @@ JDK 1.7 中各种垃圾收集器相关的常用参数整理如下
 |UseSerialGC|虚拟机运行在 Client 模式下的默认值, 打开此开关后, 使用 Serail + Serail Old 的收集器组合进行内存回收|
 |UseParNewGC|打开此开关后, 使用 ParNew + Serial Old 的收集器组合进行内存回收|
 |UseConcMarkSweepGC|打开此开关后, 使用 ParNew + CMS + Serial Old 的收集器组合进行内存回收; Serail Old 收集器将作为 CMS 收集器出现 Concurrent Mode Failure 失败后的后备收集器使用|
-|UseParallelGC||
+|UseParallelGC|-|
