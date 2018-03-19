@@ -90,3 +90,32 @@ option 的合法值见下表
 |-histo|显示堆中对象统计信息, 包括类, 实例数量, 合计容量|
 |-permstat|以 ClassLoader 为统计口径显示永久代内存状态; 只在 Linux/Solaris 平台下有效|
 |-F|当虚拟机进程堆 -dump 选项没有响应时, 可使用这个选项强制生成 dump 快照; 只在 Linux/Solaris 平台下有效|
+
+##### jhat: 虚拟机堆转储快照分析工具
+Sun JDK 提供 jhat (JVM Heap Analysis Tool) 命令与 jmap 搭配使用, 来分析 jmap 生成的堆转储快照; jhat 内置了一个微型的 HTTP/HTML 服务器, 生成的 dump 文件的分析结果后, 可以在浏览器中查看  
+分析结果默认是以包为单位进行分组显示, 分析内存泄露问题主要会使用到其中的 "Heap Histogram" (与 jmap -histo 功能一样) 与 OQL 页签功能, 前者可以找到内存中总容量最大的对象, 后者是标准的对象查询语言, 使用类似 SQL 的语法对内存中的对象进行查询统计
+
+##### jstack: Java 堆栈跟踪工具
+jstack (Stack Trace For Java) 命令用于生成虚拟机当前时刻的线程快照 (一般称为 threaddump 或 javacore 文件); 线程快照就是当前虚拟机内每一条线程正在执行的方法堆栈的集合, 生成线程块中的主要目的是定位线程出现长时间停顿的原因, r如线程死锁, 死循环, 请求外部资源导致的长时间等待等都是导致线程长时间停顿的常见原因; 线程出现停顿的时候通过 jstack 来查看各个线程的调用堆栈, 就可以知道没有响应的线程到底在后台做什么事情或等待什么资源; jstack 命令格式如下:
+```
+jstack [option] vmid
+```
+option 的合法值见下表
+
+|选项|作用|
+|-|-|
+|-F|当正常输出的请求不被响应时, 强制输出线程堆栈|
+|-l|除堆栈外, 显示关于锁的附加信息|
+|-m|如果调用到本地方法的话, 可以显示 C/C++ 的堆栈|
+
+##### HSDIS: JIT 生成代码反汇编
+TODO...
+
+#### JDK 的可视化工具  
+JDK 中除了提供大量的命令行工具外, 还有两个功能强大的可视化工具: JConsole 和 VisualVM, 这个两个工具是 JDK 的正式成员, 没有被贴上 "unsupported and experimental" 的标签
+
+##### JConsole: Java 监视与管理控制台
+TODO...
+
+##### VisualVM: 多合一故障处理工具
+TODO...
