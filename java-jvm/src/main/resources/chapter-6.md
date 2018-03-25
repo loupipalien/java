@@ -85,3 +85,97 @@ Java 代码在进行 Javac 编译的时候, 并不像 C 和 C++ 那样有连接�
 |u2|length|1|
 |u1|bytes|length|
 length 值说明了这个 UTF-8 编码的字符串是多少字节, 它后面紧跟着的长度为 length 字节的连续数据是一个使用 UTF-8 缩略编码表示的字符串; UTF-8 缩略编码与普通 UTF-8 编码的区别是: '\u0001' 到 '\u007f' 之间的字符串的缩略码使用一个字节表示, 从 '\u0080' 到 '\uo7ff' 之间的所有字符的缩略编码用两个字节表示, 从 '\0800' 到 '\ufff' 之间的所有字符的缩略编码就按照普通的 UTF-8 编码规则使用三个字节表示; 由于 Class 文件中方法, 字段等都需要引用 CONSTANT_Utf8_info 型常量来描述名称, 所以 CONSTANT_Utf8_info 型常量的最大长度也就是 Java 中方法, 字段名的最大长度, 即 u2 类型所能表示的最大值 65535 (64 KB)
+
+###### 常量池中的 14 种常量项的结构总表
+|常量|名称|类型|描述|
+|-|-|-|-|
+|CONSTANT_Utf8_info|tag|u1|值为 1|
+|-|length|u2|UTF-8 编码的字符串占用的字节数|
+|-|bytes|u1|长度为 length 的 UTF-8 编码的字符串|
+|CONSTANT_Integer_info|tag|u1|值为 3|
+|-|bytes|u4|按照高位在前存储 int 值|
+|CONSTANT_Float_info|tag|u1|值为 4|
+|-|bytes|u4|按照高位在前存储 float 值|
+|CONSTANT_Long_info|tag|u1|值为 5|
+|-|bytes|u8|按照高位在前存储 long 值|
+|CONSTANT_Double_info|tag|u1|值为 6|
+|-|bytes|u8|按照高位在前存储 double 值|
+|CONSTANT_Class_info|tag|u1|值为 7|
+|-|index|u2|指向全限定名常量项的索引|
+|CONSTANT_Stringt_info|tag|u1|值为 8|
+|-|bytes|u2|指向字符串字面量的索引|
+|CONSTANT_Fieldref_info|tag|u1|值为 9|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_Class_info 的索引项|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_NameAndType_info 的索引项|
+|CONSTANT_Methodref_info|tag|u1|值为 10|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_Class_info 的索引项|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_NameAndType_info 的索引项|
+|CONSTANT_InterfaceMethodref_info|tag|u1|值为 11|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_Class_info 的索引项|
+|-|index|u2|指向声明字段的类或接口描述符 CONSTANT_NameAndType_info 的索引项|
+|CONSTANT_NameAndType_info|tag|u1|值为 12|
+|-|index|u2|指向该字段或方法名称常量项的索引|
+|-|index|u2|指向该字段或方法描述符常量项的索引|
+|CONSTANT_MethodHandle_info|tag|u1|值为 15|
+|-|reference_kind|u1|值必须在 1 - 9 之间 (包括 1 和 9), 它决定了方法句柄的类型, 方法句柄类型的值表示方法句柄的字节码行为|
+|-|reference_index|u2|值必须是对常量池的有效索引|
+|CONSTANT_MethodType_info|tag|u1|值为 16|
+|-|desctiptor_index|u2|值必须是对常量池的有效索引|
+|CONSTANT_InvokeDynamic_info|tag|u1|值为 18|
+|-|bootstrap_method_attr_index|u2|值必须是当前 Class 文件中引导方法 bootstrap_methods[] 数组的有效索引|
+|-|name_and_type_index|u2|值必须是对当前常量池的有效索引, 常量池在该索引处的项必须是 CONSTANT_NameAndType_info 结构, 表示方法名和方法描述符|
+
+##### 访问标志
+在常量池结束之后, 紧接着的两个字节代表访问标志 (access_flags), 这个标志用于标识一些类或者接口层次的访问信息, 包括: 这个 Class 是类还是接口; 是否定于为 public 类型; 是否定义为 abstract 类型; 如果是类的话是否被声明为 final 等; 具体的标志位以及标志的含义见下表
+|标志名称|标志值|含义|
+|-|-|-|
+|ACC_PUBLIC|0x0001|是否为 public|
+|ACC_FINAL|0x0010|是否被声明为 final, 只有类可设置|
+|ACC_SUPER|0x0020|是否允许使用 invokespecial 字节码指令的新语意, invokespecial 指令的语意在 JDK 1.0.2 发生过变化, 为了区别这条指令使用哪些语意, JDK 1.0.2 之后编译出来的类的这个标志都必须为真|
+|ACC_INTERFACE|0x0200|标识这是一个接口|
+|ACC_ABSTRACT|0x0400|是否为 abstract 类型, 对于接口或抽象类来说, 此标识值为真, 其他类值为假|
+|ACC_SYNTHETIC|0x1000|标识这个类并非由用户代码产生的|
+|ACC_ANNOTATION|0x2000|标识这是一个注解|
+|ACC_ENUM|0x4000|标识这是一个枚举|
+access_flags 中一共有 16 个标志位可用, 当前只定义了其中 8 个, 没有使用到的标志位要求一律为 0
+
+##### 类索引, 父类索引与接口索引集合
+类索引和父类索引都是一个 u2 类型的数据, 而接口索引集合是一组 u2 类型的数据集合, Class 文件中由这三项数据来确定这个类的继承关系; 类索引用于确定这个类的全限定名, 父类索引用于确定这个类的父类的全限定名; 由于 Java 不允许多重继承, 所以除了 java.lang.Object 之外, 所有 Java 类都有父类, 即父类索引都不为 0; 接口索引集合就用来描述这个类实现了哪些接口, 这些实现的接口将按 implements 语句 (如果这个类本身就是一个接口, 则应当是 extends 语句) 后的接口顺序从左到右排列在接口索引集合中  
+类索引, 父类索引和接口索引集合都按照顺序排列在访问标志之后, 类索引和父类索引用两个 u2 类型的索引值表示, 它们各自指向一个类型为 CONSTANT_Class_info 的类描述符常量, 通过 CONSTANT_Class_info 类型的常量中的索引值就可以找到定义在 CONSTANT_Utf8_info 类型常量中的全限定名字符串  
+对于接口集合, 入口的第一项 u2 类型的数据为接口计数器, 表示索引表的容量, 如果该类没有实现任何接口, 则该计数器值为 0, 后面的接口的缩影表不再占任何字节
+
+##### 字段表集合
+字段表 (field_info) 用于描述接口或类中的声明的变量; 字段包括类级变量以及实例变量, 但不包括在方法内部声明的局部变量; 字段可以包含的信息有: 字段的作用域 (public, private, protected 修饰符), 是实例变量还是类变量 (static 修饰符), 可变性 (final), 并发可见性 (volatile 修饰符, 是否强制从主内存读写), 可否被序列化 (transient 修饰符), 字段数据类型 (基本类型, 对象, 数组), 字段名称; 下表列出了字段表的最终格式
+|类型|名称|数量|
+|-|-|-|
+|u2|access_flags|1|
+|u2|name_index|1|
+|u2|desctiptor_index|1|
+|u2|attributes_count|1|
+|attribute_info|attributes|attributes_count|
+字段修饰符放在 access_flags 中, 它与类中的 access_flags 是非常类似的, 都是一个 u2 的数据类型, 其中可以设置的标志位和含义见下表
+|标志名称|标志值|含义|
+|ACC_PUBLIC|0x0001|字段是否 public|
+|ACC_PRIVATE|0x0002|字段是否 private|
+|ACC_PROTECTED|0x0004|字段是否 protected|
+|ACC_STATIC|0X0008|字段是否 static|
+|ACC_FINAL|0x0010|字段是否 final|
+|ACC_VOLATILE|0x0040|字段是否 volatile|
+|ACC_TRANSIENT|0x0080|字段是否 transient|
+|ACC_SYNTHTIC|0x1000|字段是否由编译器自动产生的|
+|ACC_ENUM|0x4000|字段是否 enum|
+在实际情况中, ACC_PUBLIC, ACC_PRIVATE, ACC_PROTECTED 三个标志最多只能选择其一, ACC_FINAL, ACC_VOLATILE 不能同时选择, 接口中字段必须有 ACC_PUBLIC, ACC_STATIC, ACC_FINAL 标志, 这些都是由 Java 本身语言规则所决定的  
+跟随 access_flags 标志的是 name_index 和 desctiptor_index, 他们都是对常量池的引用, 分别代表着字段的简单名称以及字段和方法的描述符; 描述符的作用是用来描述字段的数据类型, 方法的参数列表 (包括数量, 类型以及顺序) 和返回值  
+根据描述符的规则, 基本数据类型 (byte, char, double, float, int, long, short, boolean) 以及无返回值的 void 类型都用一个大写字符来表示, 而对象类型则用字符 L 加对象的全限定名来表示, 具体见下表
+|标识字符|含义|标识字符|含义|
+|-|-|-|-|
+|B|基本类型 byte|J|基本类型 long|
+|C|基本类型 char|S|基本类型 short|
+|D|基本类型 double|Z|基本类型 boolean|
+|F|基本类型 float|V|特殊类型 void|
+|I|基本类型 int|L|对象类型, 如 Ljava/lan/Object|
+对于数组类型, 每一个维度将使用一个前置的 "[" 字符来描述, 如一个定义为 "java.lang.String[]\[]" 类型的二维数组, 将被记录为: "[[Ljava/lang/String", 一个整型数组 "int[]" 将被记录为 "[I"  
+用描述符来描述方法时, 按照先参数列表, 后返回值的顺序描述, 参数列表按照参数的严格顺序放在一组小括号 "()" 中; 如方法 void inc() 的描述符为 "()V" 方法 java.lang.String toString() 的描述符为 "()Ljava/lang/String", 方法 int indexOf(char[] source, int sourceOffset, int sourceCount, char[] target, int targetCount, int fromIndex) 的描述符为 "([CII[CIII)I"  
+字段表集合中不会列出从超类或父接口中继承而来的字段, 但有可能列出原本 Java 代码中不存在的字段, 譬如在内部类中为了保持对外部类的访问性, 会自动添加指向外部类实例的字段; 另外在 Java 语言中字段时无法重载的, 两个字段的数据类型, 修饰符不管是否相同, 都必须使用不一样的名称, 但对于字节码来讲, 如果两个字段的描述符不一致, 那字段重名就是合法的  
+
+##### 方法表集合
