@@ -146,27 +146,25 @@ access_flags 中一共有 16 个标志位可用, 当前只定义了其中 8 个,
 
 ##### 字段表集合
 字段表 (field_info) 用于描述接口或类中的声明的变量; 字段包括类级变量以及实例变量, 但不包括在方法内部声明的局部变量; 字段可以包含的信息有: 字段的作用域 (public, private, protected 修饰符), 是实例变量还是类变量 (static 修饰符), 可变性 (final), 并发可见性 (volatile 修饰符, 是否强制从主内存读写), 可否被序列化 (transient 修饰符), 字段数据类型 (基本类型, 对象, 数组), 字段名称; 下表列出了字段表的最终格式
-|类型|名称|数量|
-|-|-|-|
-|u2|access_flags|1|
-|u2|name_index|1|
-|u2|desctiptor_index|1|
-|u2|attributes_count|1|
-|attribute_info|attributes|attributes_count|
+|类型|名称|数量|类型|名称|数量|
+|-|-|-|-|-|-|
+|u2|access_flags|1|u2|attributes_count|1|
+|u2|name_index|1|attribute_info|attributes|attributes_count|
+|u2|desctiptor_index|1|-|-|-|
 字段修饰符放在 access_flags 中, 它与类中的 access_flags 是非常类似的, 都是一个 u2 的数据类型, 其中可以设置的标志位和含义见下表
 |标志名称|标志值|含义|
-|ACC_PUBLIC|0x0001|字段是否 public|
-|ACC_PRIVATE|0x0002|字段是否 private|
-|ACC_PROTECTED|0x0004|字段是否 protected|
-|ACC_STATIC|0X0008|字段是否 static|
-|ACC_FINAL|0x0010|字段是否 final|
-|ACC_VOLATILE|0x0040|字段是否 volatile|
-|ACC_TRANSIENT|0x0080|字段是否 transient|
-|ACC_SYNTHTIC|0x1000|字段是否由编译器自动产生的|
-|ACC_ENUM|0x4000|字段是否 enum|
+|ACC_PUBLIC|0x0001|字段是否为 public|
+|ACC_PRIVATE|0x0002|字段是否为 private|
+|ACC_PROTECTED|0x0004|字段是否为 protected|
+|ACC_STATIC|0X0008|字段是否为 static|
+|ACC_FINAL|0x0010|字段是否为 final|
+|ACC_VOLATILE|0x0040|字段是否为 volatile|
+|ACC_TRANSIENT|0x0080|字段是否为 transient|
+|ACC_SYNTHETIC|0x1000|字段是否由编译器自动产生的|
+|ACC_ENUM|0x4000|字段是否为 enum|
 在实际情况中, ACC_PUBLIC, ACC_PRIVATE, ACC_PROTECTED 三个标志最多只能选择其一, ACC_FINAL, ACC_VOLATILE 不能同时选择, 接口中字段必须有 ACC_PUBLIC, ACC_STATIC, ACC_FINAL 标志, 这些都是由 Java 本身语言规则所决定的  
 跟随 access_flags 标志的是 name_index 和 desctiptor_index, 他们都是对常量池的引用, 分别代表着字段的简单名称以及字段和方法的描述符; 描述符的作用是用来描述字段的数据类型, 方法的参数列表 (包括数量, 类型以及顺序) 和返回值  
-根据描述符的规则, 基本数据类型 (byte, char, double, float, int, long, short, boolean) 以及无返回值的 void 类型都用一个大写字符来表示, 而对象类型则用字符 L 加对象的全限定名来表示, 具体见下表
+根据描述符的规则, 基本数据类型 (byte, char, double, float, int, long, short, boolean) 以及无返回值的 void 类型都用一个大写字符来表示, 而对象类型则用字符 L 加对象的全限定名来表示; 具体见下表
 |标识字符|含义|标识字符|含义|
 |-|-|-|-|
 |B|基本类型 byte|J|基本类型 long|
@@ -179,3 +177,36 @@ access_flags 中一共有 16 个标志位可用, 当前只定义了其中 8 个,
 字段表集合中不会列出从超类或父接口中继承而来的字段, 但有可能列出原本 Java 代码中不存在的字段, 譬如在内部类中为了保持对外部类的访问性, 会自动添加指向外部类实例的字段; 另外在 Java 语言中字段时无法重载的, 两个字段的数据类型, 修饰符不管是否相同, 都必须使用不一样的名称, 但对于字节码来讲, 如果两个字段的描述符不一致, 那字段重名就是合法的  
 
 ##### 方法表集合
+Class 文件存储格式中对方法的描述与对字段的描述几乎采用了完全一致的方式, 方法表的结构同字段表一样, 依次包括了访问标志, 名称索引, 描述符索引, 属性表集合几项; 具体见下表
+|类型|名称|数量|类型|名称|数量|
+|-|-|-|-|-|-|
+|u2|access_flags|1|u2|attributes_count|1|
+|u2|name_index|1|attribute_info|attributes|attributes_count|
+|u2|desctiptor_index|1|-|-|-|
+因为 volatile 关键字和 transient 关键字不能修饰方法, 所以方法表的访问标志中没有了 ACC_VOLATILE 和 ACC_TRANSIENT 标志; 与之相对的, synchronized, native, strictfp, abstract 关键字可以修饰方法, 所以方法表的访问标志中增加了 ACC_SYNCHRONIZED, ACC_NATIVE, ACC_STRICTFP, ACC_ABSTRACT 标志; 具体见下表
+|标志名称|标志值|含义|
+|ACC_PUBLIC|0x0001|方法是否为 public|
+|ACC_PRIVATE|0x0002|方法是否为 private|
+|ACC_PROTECTED|0x0004|方法是否为 protected|
+|ACC_STATIC|0X0008|方法是否为 static|
+|ACC_FINAL|0x0010|方法是否为 final|
+|ACC_SYNCHRONIZED|0x0020|方法是否为 synchronized|
+|ACC_BRIDGE|0x0040|方法是否是由编译器产生的桥接方法|
+|ACC_VARARGS|0x0080|方法是否接受不定参数|
+|ACC_NATIVE|0x0100|方法是否为 native|
+|ACC_ABSTRACT|0x0400|方法是否为 abstract|
+|ACC_STRICTFP|0x0800|方法是否为 strictfp|
+|ACC_SYNTHETIC|0x1000|方法是否是由编译器自动产生的|
+方法的定义可以通过访问标志, 名称索引, 描述符索引表表达清楚, 方法里的代码经过编译器编译成字节码指令后, 存放在方法属性表集合中一个名为 "Code" 的属性中  
+与字段表集合相对应的, 如果父类方法在子类中没有被重写, 方法表集合中则不会出现来自父类的方法信息; 但同样的, 有可能会出现由编译器自动添加的方法, 最典型的便是类构造器 "<clinit>" 方法和实例构造器 "<init>" 方法  
+在 Java 语言中, 要重载以一个方法, 除了要与原方法具有相同的简单名称之外, 还要求必须拥有一个与原方法不同的特征签名, 特征签名就是一个方法中各个参数在常量池中的字段符号引用的集合, 也因为返回值不会包含在特征签名中, 因此 Java 语言里是无法仅仅依靠返回值的不同来对一个已有方法进行重载的; 但在 Class 文件格式中, 特征签名的范围更大一些, 只要描述符不是完全一致的两个方法也可以共存; 也就是说如果两个方法有相同的名称和特征签名, 但是返回值不同, 那么也是可以合法共存于同一个 Class 文件中的
+
+##### 属性表集合
+在 Class 文件, 字段表, 方法表都可以携带自己的属性表集合, 以用于描述某些场景专有的信息  
+与 Class 文件中其他的数据项目要求严格的顺序, 长度和内容不同, 属性表集合的限制稍微宽松了些, 不再要求各个属性表具有严格顺序, 并且只要不与已有属性名重复, 任何人实现的编译器都可以向属性表中写入自己定义的属性信息, Java 虚拟机运行时会忽略掉它不认识的属性, 在 <<Java 虚拟机规范 (Java SE 7)>> 版中, 预定义了 21 项虚拟机实现应当能识别的属性; 具体见下表
+|属性名称|使用位置|含义|
+|-|-|-|
+|Code|方法表|Java 代码编译成的字节码指令|
+|ConstantValue|字段表|final 关键字定义的常量值|
+|Deprecated|类, 方法表, 字段表|被声明为 deprecated 的方法和字段|
+||||
