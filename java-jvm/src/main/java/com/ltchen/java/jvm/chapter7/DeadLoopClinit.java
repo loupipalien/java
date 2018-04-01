@@ -1,11 +1,11 @@
-package chapter7;
+package com.ltchen.java.jvm.chapter7;
 
 /**
  * @author : ltchen
  * @date : 2018/3/31
  * @desc : 多线程环境中加载一个类的 <clint>() 方法, 当 <clint>() 方法耗时很久, 就可能造成多个进程阻塞
  */
-public class DeadLoopClass {
+public class DeadLoopClinit {
 
     static class DeadLoop {
         static {

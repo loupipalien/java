@@ -1,4 +1,4 @@
-package chapter7;
+package com.ltchen.java.jvm.chapter7;
 
 /**
  * @author : ltchen
