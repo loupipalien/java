@@ -75,3 +75,155 @@ placeHolder 能被回收的根本原因是: 局部变量表中的 Slot 是否还
 虚拟机规范允许具体的虚拟机实现增加一些规范中没有描述的信息到栈帧中, 例如调试相关的信息, 这部分信息完全取决于具体的虚拟机实现
 
 #### 方法调用
+方法调用并不等同于方法执行, 方法调用阶段唯一的任务就是确定被调用方法的版本 (即调用哪一个方法), 暂时还不涉及方法内部的具体运行过程; Class 文件的编译过程中不包含传统编译中的连接步骤, 一切方法调用在 Class 文件里存储的都只是符号引用, 而不是方法在实际运行时内存布局的入口地址 (相当于直接引用); 这个特性给 Java 带来了更强大的动态扩展能力, 但也使 Java 方法调用过程变得相对复杂起来, 需要在类加载期间, 甚至到运行期间才能确定目标方法的直接引用
+
+##### 解析
+所有方法调用中的目标方法在 Class 文件里都是一个常量池中的符号引用, 在类加载的解析阶段, 会将其中的一部分符号引用转化为直接引用, 这种解析能成立的前提是: 方法在程序真正运行之前就有一个可确定的调用版本, 并且这个方法的调用版本在运行期是不可改变的; 换句话说, 调用目标在程序代码写好, 编译器进行编译时就必须确定下来, 这类方法的调用称为解析 (Resolution ) 调用
+在 Java 语言中符合 "编译期可知, 运行期不可变" 要求的方法, 主要包括静态方法和私有方法两类, 前者与类型直接关联, 后者在外部不可访问, 这两种方法各自的特点决定了它们不可能通过继承或别的方式重写其他版本, 因此它们都合适在类加载阶段进行解析; 与之对应的是, 在 Java 虚拟机里提供了 5 条方法调用字节码指令, 分别如下
+- invokestatic: 调用静态方法
+- invokespecial: 调用实例构造器 <init> 方法, 私有方法和父类方法
+- invokevirtual: 调用所有的虚方法
+- invokeinterface: 调用接口方法, 会在运行时再确定一个实现此接口的对象
+- invokedynamic: 先在运行时动态解析出调用点限定符所引用的方法, 然后再执行该方法, 在此之前的 4 条调用指令,　分派逻辑是固化在 Java 虚拟机内部的, 而 invokedynamic 指令的分派逻辑是由用户所设定的引导方法决定的
+
+只要能被 invokestatic 和 invokespecial 指令调用的方法, 都可以在解析阶段中确定唯一的调用版本, 符合这个条件的有静态分方法, 私有方法, 实例构造器, 父类方法 4 类, 它们在类加载的时候就会把符号引用解析为该方法的直接引用; 这些方法可以称为非虚方法, 与之相对的其他方法称为虚方法 (除去 final 方法)  
+Java 中的非虚方法除了使用 invokestatic, invokespecial 调用的方法之外, 还有一种就是被 final 修饰的方法; 虽然 final 方法是使用 invokevirtual 指令来调用的, 但是由于它无法被覆盖, 没有其他版本, 所以也无须对方法接收者进行多态选择, 又或者说多态的选择结果肯定是唯一的, 在 Java 语言规范中明确说明了 final 方法是一种非虚方法  
+解析调用一定是个静态的过程, 在编译期间就完全确定, 在类装载的解析阶段就会把涉及的符号引用全部转变为可确定的直接引用, 不会延迟到运行期再去完成; 而分派 (Dispatch) 调用则可能是静态的也可能是动态的, 根据分派依据的 [宗量] 数可分为单分派和多分派; 因此这两类分派方式的两两组合就构成了静态单分派, 静态多分派, 动态单分配, 动态多分派 4 中分派组合情况
+
+##### 分派
+Java 是一门面向对象的程序语言, 因为 Java 具备面向对象的三个基本特征: 继承, 封装, 多态; 分派调用过程将会解释多态性的一些最基本的体现, 如重写和重载在 Java 虚拟机中是如何实现的, Java 虚拟机如何确定正确的目标方法  
+
+###### 静态分派
+```
+public class StaticDispatch {
+
+    static abstract class Human {}
+
+    static class Man extends Human {}
+
+    static class Woman extends Human {}
+
+    public void sayHello (Human guy) {
+        System.out.println("Hello, guy!");
+    }
+
+    public void sayHello (Man guy) {
+        System.out.println("Hello, gentleman!");
+    }
+
+    public void sayHello (Woman guy) {
+        System.out.println("Hello, lady!");
+    }
+
+    public static void main(String[] args) {
+        Human man = new Man();
+        Human woman = new Woman();
+        StaticDispatch sd = new StaticDispatch();
+        sd.sayHello(man);
+        sd.sayHello(woman);
+    }
+
+}
+```
+在 `Human man = new Man()` 的代码中, 我们把 Human 的变量称为静态类型 (Static Type), 或者叫做外观类型 (Apprent Type), 后面的 Man 则称为变量的实际类型 (Actual Type); 静态类和实际类型在程序中都会发生一些变化, 区别是静态类型的变化仅仅在使用时发生, 变量本身的静态类型不会被改变, 并且最终的静态类型是在编译期可知的; 而实际类型变化的结果在运行期才可确定, 编译器在编译程序的时候并不知道一个对象的实际类型是什么
+```
+// 实际类型变化, 在运行期才可知
+Human man = new Man();
+Human woman = new Woman();
+// 静态类型变化
+sd.sayHello((Man) man);
+sd.sayHello((Woman) woman);
+```
+main() 中两次 sayHello() 方法调用, 在方法接收者已经确定的情况下, 使用哪个重载版本就完全取决于传入参数的数量和数据类型; 代码中可以定义了两个静态类型相同但是实际类型不同的变量, 但虚拟机 (准确的应该说编译器) 在重载时是通过参数静态类型而不是实际类型作为判定依据的; 并且静态类型是编译器可知的, Javac 编译器会根据参数的静态类型决定使用哪个重载版本, 所以选择了 sayHello(Human) 作为调用目标, 并把这个方法的符号引用写到 main() 方法里的两条 invokevirtual 指令的参数中  
+所有依赖静态类型来定位方法执行版本的分派动作称为静态分派; 静态分派的典型应用是方法重载, 静态分派发生在编译阶段, 因此确定静态分派的动作实际上不是由虚拟机来执行的; 另外, 编译器虽然能确定出方法的重载版本, 但在很多情况下这个重载的版本并不是 "唯一的", 往往只能确定一个 "更合适的" 版本; 产生这种模糊结论的主要原因是字面量不需要定义, 所以字面量没有显式的静态类型, 它的静态类型只能通过语言上的规则去理解和推断
+```
+public class OverLoad {
+
+    public static void sayHello(Object obj) {
+        System.out.println("Hello, Object!");
+    }
+
+    public static void sayHello(int arg) {
+        System.out.println("Hello, int!");
+    }
+
+    public static void sayHello(long arg) {
+        System.out.println("Hello, long!");
+    }
+
+    public static void sayHello(Character arg) {
+        System.out.println("Hello, Character!");
+    }
+
+    public static void sayHello(char arg) {
+        System.out.println("Hello, char!");
+    }
+
+    /**
+     * 基本类型和包装类型的数组参数会冲突
+     * @param arg
+     */
+    public static void sayHello(char... arg) {
+        System.out.println("Hello, char...!");
+    }
+
+    /**
+     * Character 的同级接口会冲突
+     * @param arg
+     */
+    public static void sayHello(Serializable arg) {
+        System.out.println("Hello, Serializable!");
+    }
+
+    public static void main(String[] args) {
+        sayHello('a');
+    }
+
+}
+```
+重载方法匹配优先级为: char -> int -> long -> [float -> double ->] Character -> Serializable|Comparable<Character> -> Object -> char...|Character...   
+首先 'a' 是一个 char 类型, 其次 'a' 也可以代表数字 97, 所以也可以发生自动类型转换, 去匹配 int 等参数, 但是不能自动类型转换为 boolean, byte 和 short 等不兼容的转换; 当去掉所有基本类型参数的方法, 'a' 会发生自动装箱, 匹配 Character 参数的方法; 继续匹配实现接口的的方法, 同级的实现接口的优先级是相同的; 继续则是继承父类, 如果有多层父类, 则优先级是重下往上优先级递减的, 即使传入的参数值是 null 时, 这个规则仍然适用; 再继续则是 'a' 基本类型数组和包装类型数组, 这两个优先级是相同的  
+以上代码演示了编译期间选择静态分派目标的过程, 这个过程也是 Java 语言实现方法重载的本质; 演示代码属于极端的例子, 除了用做面试题为难求职者以外, 在实际工作中几乎不可能有实际用途, 大部分这样极端的重载研究都可算是真正的 "关于茴香豆的茴有几种写法的研究"; 另外, 解析和分派这两者之间的关系并不是二选一的排他关系, 它们是在不同的层次上去筛选确定目标方法的过程; 静态方法会在类记载期就会进行解析, 而静态方法显然也使可以拥有重载版本的, 选择重载版本的过程也是通过静态分派完成的  
+
+###### 动态分派
+```
+public class DynamicDispatch {
+
+    static abstract class Human {
+        protected abstract void sayHello();
+    }
+
+    static class Man extends Human {
+        @Override
+        protected void sayHello() {
+            System.out.println("Man Say Hello!");
+        }
+    }
+
+    static class Woman extends Human {
+        @Override
+        protected void sayHello() {
+            System.out.println("Woman Say Hello!");
+        }
+    }
+
+    public static void main(String[] args) {
+        Human man = new Man();
+        Human woman = new Woman();
+        man.sayHello();
+        woman.sayHello();
+        man = new Woman();
+        man.sayHello();
+    }
+
+}
+```
+动态分派和多态性的另外一个体现 --- 重写有着很密切的关联; 以上方法调用显然不能再根据静态类型来确定, javap 字节码的找到方法调用的 invokevirtual 指令, 原因就需要从 invokevirtual 指令的多态查找过程说起; invokevirtual 指令的运行时解析过程大致分为以下几个步骤
+- 找到操作数栈顶的第一个元素所指向的对象的实际类型, 记作 C
+- 如果在类型 C 中找到与常量中描述符和简单名称都相符的方法, 则进行访问权限校验, 如果通过则返回这个方法的直接引用, 查找过程结束; 如果不通过, 则返回 java.lang.IllegalAccessError 异常
+- 否则, 按照继承关系从下往上依次对 C 的各个父类进行第 2 步的搜索和验证过程
+- 如果始终没有找到合适的方法, 则抛出 java.lang.IllegalAccessError 异常
+
+由于 invokevirtual 指令执行的第一步就是在运行期确定接受者的实际类型, 所以两次调用中的 invokevirtual 指令把常量池中的类方法引用解析到了不同的直接引用上, 这个过程就是 Java 语言中方法重写的本质; 这种在运行期根据实际类型确定方法执行版本的分派过程称为动态分派
+
+###### 单分派与多分派
