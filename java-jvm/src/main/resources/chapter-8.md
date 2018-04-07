@@ -278,3 +278,68 @@ public class Dispatch {
 方法表时分派调用的 "稳定优化" 手段, 虚拟机除了使用方法变表之外, 在条件允许的情况下, 还会使用内联缓存 (Inline Cache) 和基于 "类型继承关系分析" (Class Hierarchy Analysis, CHA) 技术的守护内联 (Guarded Inlinging) 两种非稳定的 "激进优化" 手段来获得更高的性能
 
 ##### 动态类型语言支持
+随着 JDK 7 的发布, 字节码指令集终于迎来了第一位新成员 --- invokedynamic 指令; 这条新增加的指令是 JDK 7 实现 "动态类型语言" (Dynamically Typed Language) 支持而进行的改进之一, 也是为 JDK 8 可以顺利实现 Lambda 表达式做技术准备
+
+###### 动态类型语言
+动态类型语言的关键特征是它的类型检查的主体过程是在运行期而不是编译期, 满足这个特征的语言有很多, 常用的包括: APL, Clojure, Erlang, Groovy, JavaScript, Jython, Lisp, Lua, PHP, Prolog, Python, Ruby, Smalltalk 和 Tcl 等; 相对的, 在编译期就进行类型检查过程的语言 (如 C++ 和 Java 等) 就是最常用的静态类型语言   
+"变量无类型而变量值才有类型" 也是动态类型语言的一个重要特征, 动态语言在编译时最多只能确定方法名称, 参数, 返回值等这些信息, 而不会确定方法所在的具体类型 (即方法的接受者不确定)  
+
+###### JDK 7 与动态类型
+Java 虚拟机层面对动态类型语言的支持一直都有所欠缺, 主要表现在方法调用方面: JDK 7 之前的字节码指令之中, 4 条方法调用指令 (invokevirtual, invokespecial, invokestatic, invokeinterface) 的第一个参数都是被调用方法的符号引用 (CONSTANT_Methodref_info 或者 CONSTANT_InterfaceMethodref_info 常量); 方法的符号引用在编译时产生, 而动态类型语言只有在运行期才能确定接收者类型, 所以在 Java 虚拟机上实现的动态类型语言就不得不使用其他方式 (如在编译时留个占位符类型, 运行时动态生成字节码实现具体类型到占位符类型的适配) 来实现, 这样势必让动态类型语言实现的复杂度增加, 也可能带来额外的性能或内存开销; 但这种低层问题终归是应当在虚拟机层次上去解决才最合适, 这也就是 JDK 7 (JSR-292) 中 invokedynamic 指令以及 java.lang.invoke 包出现的技术背景
+
+###### java.lang.invoke 包
+这个包的主要目的是在之前单纯依靠符号引用来确定调用的目标方法这种方式之外, 提供一种新的动态确定目标方法的机制, 称为 MethodHandle
+```
+public class MethodHandleTest {
+
+    static class ClassA {
+        public void println(String str) {
+            System.out.println(str);
+        }
+    }
+
+    public static void main(String[] args) throws Throwable {
+
+        Object obj = System.currentTimeMillis() % 2 == 0 ? System.out : new ClassA();
+
+        // 无论 obj 最终是哪个实现类, 这句代码都能正确的调用到 println 方法
+        getPrintlnMH(obj).invokeExact("ltchen");
+
+    }
+
+    private static MethodHandle getPrintlnMH(Object receiver) throws NoSuchMethodException, IllegalAccessException {
+        /*
+         * MethodType: 代表 "方法类型", 包含了方法的返回值 (methodType() 的第一参数) 和具体参数 (methodType() 第二个及以后的参数)
+         */
+        MethodType mt = MethodType.methodType(void.class, String.class);
+
+        /*
+         * MethodHandles.lookup(): 是在指定类中查找符合给定的方法名称, 方法类型, 并且符合调用权限的方法句柄
+         * 因为这里调用的是一个虚方法, 按照 Java 语言的规则, 方法的第一个参数是隐式的, 代表该方法的接收者, 也是 this 指向的对象, 这个参数以前
+         * 是放在参数列表中进行传递的, 而现在提供了 bingTo() 方法完成这件事情
+         */
+        return MethodHandles.lookup().findVirtual(receiver.getClass(), "println", mt).bindTo(receiver);
+    }
+
+}
+```
+方法 getPrintlnMH() 中模拟了 invokevirtual 指令的执行过程, 只不过它的分派逻辑并非固化在 Class 文件的字节码上, 而是通过一个具体方法来实现; 而这个方法本身的返回值 (MethodHandle 对象), 可以视为对最终调用方法的一个 "引用"  
+以上事情也可以用反射来实现, 如果仅站在 Java 语言的角度来看, MethodHandle 的使用方法和效果与 Reflection 有众多相似之处, 但是仍有以下区别
+- 本质上讲, Reflection 和 MethodHandle 机制都是在模拟方法调用, 但 Reflection 是在模拟 Java 代码层次的方法调用, 而 MethodHandle 是在模拟字节码层次的方法调用; 在 MethodHandles.lookup 中的 3 个方法中 --- findStatic(), findVirtual(), findSpecial() 正是为了对应 invokestatic, invokevirtual & invokeinterface, invokestatic 这几条字节码指令的执行权限校验行为; 而这些低层细节在使用 Reflection API 时是不需要关心的
+- Reflection 中的 java.lang.reflect.Method 对象远比 MethodHandle 机制中的 java.lang.invoke.MethodHandle 对象所包含的信息多; 前者是方法在 Java 端的全面映像, 包含了方法的签名, 描述符以及方法属性表中各种属性的 Java 端表示, 还包含执行权限等的运行期信息; 而后者仅仅包含与执行该方法相关的信息; 通俗的讲, Reflection 是重量级的, 而 MethodHandle 是轻量级的
+- 由于 MethodHandle 是对字节码的方法指令调用的模拟, 所以理论上虚拟机在这方面做的各种优化 (如方法内联), 在 MethodHandle 上也应当可以采用类似的思路去支持, 而通过反射去调用方法则不行
+
+最关键的一点还在于去掉前提 "仅站在 Java 语言的角度去看": Reflection API 的设计目标只为了 Java 语言服务的, 而 MethodHandle 则设计成可服务于所有 Java 虚拟机之上的语言, 其中也包括 Java 语言
+
+###### invokedynamic 指令
+在某种程度上, invokedynamic 指令与 MethodHandle 机制的作用是一样的, 都是为了解决原有 4 条 "invoke*" 指令方法分派规则固化在虚拟机之中的问题, 把如何查找目标方法的决定权从虚拟机转嫁到具体用户代码之中, 让用户 (包含其他语言的设计这) 有更高的自由度; 它们两者的思路也是可类比的, 可以把它们想象成为了达到同一个目的, 一个采用上层 Java 代码和 API 实现, 另一个用字节码和 Class 中其他属性, 常量完成
+TODO...
+
+###### 掌握方法分派规则
+invokedynamic 指令与前面 4 条 "invoke*" 指令的最大差别就是它的分派逻辑不是由虚拟机决定的, 而是由程序员决定的;
+TODO...
+
+#### 基于栈的字节码解释执行引擎
+许多 Java 虚拟机的执行引擎在执行 Java 代码的时候都有解释执行 (通过解释器执行) 和编译执行 (通过即时编译器产生本地代码执行) 两种选择
+
+##### 解释执行
