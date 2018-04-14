@@ -32,3 +32,4 @@
 CommmonClassLoader, CatalinaClassLoader, SharedClassLoader 和 WebAppClassLoader 是 Tomcat 自定义的类加载器, 它们分别加载 /common, /server, /shared 和 /WebApp/WEB-INF 中的 Java 类库; 其中 WebApp 类加载和 Jsp 类加载器通常会存在多个实例, 每一个 Web 应用程序对应一个 Jsp 类加载器; CommmonClassLoader 能加载的类都可以被 CatalinaClassLoader 和 SharedClassLoader 使用, 而 CatalinaClassLoader 和 SharedClassLoader 自己能加载的类与对方相互隔离; WebAppClassLoader 可以使用 SharedClassLoader 加载到的类, 但各个 WebAppClassLoader 实例之间相互隔离; 而 JspClassLoader 的加载范围仅仅是这个 JSP 文件编译出的 Class, 它出现的目的就是为了被丢弃: 当服务器检测到 JSP 文件被修改时, 会替换掉目前的 JspClassLoader 的实例, 并通过再建立一个新的 Jsp 类加载器来实现 JSP 文件的 HotSwap 功能
 
 ##### OSGi: 灵活的类加载架构
+OSGi
