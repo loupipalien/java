@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * @author : ltchen
  * @date : 2018/4/19
- * @desc : 当泛型遇见重载 (请使用 JDK 1.6 编译)
+ * @desc : 当泛型遇见重载 (请使用 JDK 1.6 编译), 自动装箱, 条件编译
  */
 public class GenericTypes {
 
