@@ -60,3 +60,18 @@ HotSpot 虚拟机提供了一个类似方法调用计数器阈值 -XX: CompileTh
 与方法计数器不同, 回边计数器没有计数热度衰减的过程, 因此这个计数器统计的就是该方法循环体执行的绝对次数, 当计数器溢出的时候, 它还会把方法计数器的值也调整到溢出状态, 这样下次再进入该方法时就会执行标准的编译过程
 
 ##### 编译过程
+在默认设置下, 无论是方法调用产生的即时编译请求, 还是 OSR 编译请求, 虚拟机在代码编译器还未完成之前, 都仍将按照解释器方式继续执行, 而编译的动作可以在后台的编译线程中执行; 用于可以通过参数 -XX: -BackgroudComplication 来禁止后台编译, 在禁止后台编译后, 一旦达到 JIT 的编译条件, 执行线程向虚拟机提交编译请求后将会一直等待, 直到编译过程完成后再开始执行编译器输出的本地代码; 在后台执行编译的过程中, Client Compiler 和 Server Compiler 两个编译器的编译过程是不一样的  
+
+###### Client Compiler
+- 在第一阶段, 平台独立的前端将字节码构成一种高级中间代码表示 (High-Level Intermediate Representation, HIR); HIR 使用静态单分配 (Static Single Assignment, SSA) 的形式来代表代码值, 这可以使得一些在 HIR 的构造过程之中和之后进行的优化动作更容易实现; 在此之前编译器会在字节码上完成一些基础优化, 如方法内联, 常量传播等优化将会在字节码被构造成 HIR 之前完成  
+- 在第二阶段, 平台相关的后端从 HIR 中产生低级中间代码表示 (Low-Level Intermediate Representation, LIR), 而在此之前会在 HIR 上完成另外一些优化, 如空置检查消除, 范围检查消除等, 以便让 HIR 达到更高效的代码表示形式
+- 在最后阶段, 平台相关的后端使用线性扫面算法 (Linear Scan Register Allocation) 在 LIR 上分配寄存器, 并在 LIR 上做葵孔 (Peephole) 优化, 然后产生机器代码
+
+###### Server Compiler
+Server Compiler 编译时会执行所有经典的优化动作, 如无用代码消除 (Dead Code Elimination), 循环展开 (Loop Unrolling), 循环表达式外提 (Loop Expression Hoising), 消除公共子表达式 (Common Subexpression Elimination), 常量传播 (Constant Propagation), 基本块重排序 (Basic Block Recording) 等; 以及一些与 Java 语言特性相关的优化技术, 如范围检查消除 (Range Check Elimination), 空置检查消除 (Null Check Elimination) 等; 另外还可能根据解释器或 Client Compiler 提供的性能监控信息, 进行一些不稳定的激进优化, 如守护内联 (Guarded Inlining), 分支频率预测 (Branch Frequency Prediction) 等  
+Server Compiler 的寄存器分配器是一个全局着色分配器, 它可以充分利用某些处理器架构 (如 RISC) 上的大寄存器集合; 以即时编译器的标准来看, Server Compiler 编译无疑是比较缓慢的, 但可以减少本地代码执行时间
+
+##### 查看及分析即时编译结果
+TODO...
+
+#### 编译优化技术
