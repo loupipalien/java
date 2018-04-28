@@ -35,3 +35,96 @@ Java 内存模型规定了所有变量都存储在主内存 (Main Memory) 中; �
 - assign (赋值): 作用于工作内存的变量, 它把一个从执行引擎接收到的值赋给工作内存的变量, 每当虚拟机遇到一个给变量赋值的字节码指令时执行这个操作
 - store (存储): 作用于工作内存的变量, 它把工作内存中一个变量的值传送到主内存中, 以便随后的 write 操作使用
 - write (写入): 作用于主内存的变量, 它把 store 操作从工作内存中得到的变量的值放入主内存的变量中
+
+如果要把一个变量从主内存复制到工作内存, 那就要顺序地执行 read 和 load 操作, 如果要把变量从工作内存同步会主内存, 就要顺序地执行 store 和 write 操作; Java 内存模型只要求上述两个操作必须按顺序执行, 而没有保证是连续执行的; 除此之外, Java 内存模型还规定了在执行上述 8 种基本操作时必须满足如下规则
+- 不允许 read 和 load, store 和 write 操作之一单独出现, 即不允许一个变量从主内存读取了但工作内存不接受, 或者从工作内存发起了回写但主内存不接受的情况出现
+- 不允许一个线程丢弃它的最近的 assign 操作, 即变量在工作内存中改变了之后必须把该变化同步回主内存
+- 不允许一个线程无原因的 (没有发生过任何 assign 操作) 把数据从线程的工作内存同步回主内存
+- 一个新的变量只能在主内存中 "诞生", 不允许在工作内存中直接使用一个未被初始化 (load 或 assign) 的变量, 也就是对一个变量实施 use, store 操作之前, 必须先执行过了 assign 和 load 操作
+- 一个变量在同一时刻只允许一条线程对其进行 lock 操作, 但 lock 操作可以被同一条线程重复执行多次, 多次执行 lock 后, 只有执行相同次数的 unlock 操作, 变量才会被解锁
+- 如果对一个变量执行 lock 操作, 那将会清空工作内存中此变量的值, 在执行引擎使用这个变量前, 需要重新执行 load 或 assign 操作初始化变量的值
+- 如果一个变量事先没有被 lock 操作锁定, 那就不允许对它执行 unlock 操作, 也不允许去 unlock 一个被其他线程锁定住的变量
+- 对一个变量执行 unlock 操作之前, 必须先把此变量同步回主内存中 (执行 store, write 操作)
+
+以上 8 种内存访问操作以及上述规则限定, 再加上 volatile 的一些规定, 就已经完全确定了 Java 程序中哪些内存访问操作在并发下是安全的; 由于这种定义相当严谨, 但又十分繁琐, 实践起来非常麻烦, 以下将会介绍一个等效判定原则 ---  先行发生原则, 用来确定一个访问在并发环境下是否安全
+
+##### 对于 volatile 型变量的特殊规则
+关键字 volatile 可以说是 Java 虚拟机提供的最轻量级的同步机制, 但是它并不容易被理解; 当一个变量定义为 volatile 之后, 它将具备两种特性
+
+###### 可见性
+第一是保证此变量对所有线程的可见性, 这里的可见性是指当一条线程修改了这个变量的值, 新值对于其他线程来说是可以立即得知的; 而普通变量则不能做到这一点, 普通变量的值在线程间传递均需要通过主内存来完成, 例如: 线程 A 修改了一个普通变量的值, 然后向主内存进行回写, 另外一条线程 B 在线程 A 回写完成了之后再从主内存进行读取操作, 新变量值才会对线程 B 可见    
+关于 volatile 变量的可见性, 经常会被认为 "volatile 变量对所有线程是立即可见的, 对 volatile 变量的所有写操作都能立刻反应到其他线程中", 换句话说就是 "volatile 变量在各个线程中是一致的, 所以基于 volatile 变量的运算在并发下是安全的"; 这句话的论据没有错, 但是其论据不能得出 "基于 volatile 变量的运算在并发下是安全的" 这个结论; volatile 变量在各个线程额工作内存中不存在一致性问题 (在各个线程的工作内存中, volatile 变量也是可以存在不一致的情况, 但由于每次使用之气那都要先刷新, 执行引擎看不到不一致的情况, 因此可以认为不存在一致性问题), 但是 Java 中的运算并非原子操作, 所以导致 volatile 变量的运算在并发下一样是不安全的
+```
+public class VolatileTest {
+
+    public static volatile int race = 0;
+
+    public static void increase() {
+        race++;
+    }
+
+    private static final int THREADS_COUNT = 20;
+
+    public static void main(String[] args) {
+        Thread[] threads = new Thread[THREADS_COUNT];
+        for (int i = 0; i < THREADS_COUNT; i++) {
+            threads[i] = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    for (int j = 0; j < 10000; j++) {
+                        increase();
+                    }
+                }
+            });
+            threads[i].start();
+        }
+
+        // 等待所有线程结束
+        while (Thread.activeCount() > 1) {
+            Thread.yield();
+        }
+
+        System.out.println(race);
+    }
+}
+```
+这段代码并发起了 20 个线程, 如果能够正确执行那么最终的结果因该是 200000, 但实际上每次运行完都会发现输出的结果都不一样, 都是一个小于 200000 的值; 问题出在 race++ 这句代码中, 用 javap 反编译代码就会发现在 Class 文件中, 本只有一行代码的 increate() 方法是由 4 条字节码指令构成的 (return 指令不是 race++ 产生的, 不做计数), 从字节码层面很容易分析出原因: 当 getstatic 指令把 race 的值取到操作栈顶时, volatile 关键字保证了值此时是正确的, 但在执行 iconst_1, iadd 指令时其他线程可能把 race 的值加大了, 而栈顶的值就变成了过期的值, 所以 putstatic 指令执行后就可能把较小的 race 值同步回主内存之中
+```
+public static void increase();
+  Code:
+     0: getstatic     #2                  // Field race:I
+     3: iconst_1
+     4: iadd
+     5: putstatic     #2                  // Field race:I
+     8: return
+  LineNumberTable:
+    line 13: 0
+    line 14: 8
+```
+这里使用字节码分析并发问题仍然是不严谨的, 因为即使编译出来只有一条字节码指令, 也并不意味着执行这条指令就是一个原子操作; 一条字节码指令在解释执行时, 解释器将要运行许多行代码才能实现它的语义, 如果是编译执行, 一条字节码指令也可能转化为多条本地机器码指令, 此处使用 -XX:+PrintAssembly 参数输出反汇编来分析更加严谨, 但字节码也已经足够发现问题了  
+由于 volatile 变量只能保证可见性, 在不符合以下两条规则的运算场景总, 仍要通过加锁 (synchronized 和 java.util.concurrent 的原子类) 来保证原子性
+- 运算结果并不依赖变量的当前值, 或者能够确保只有单一的线程修改变量的值
+- 变量不需要与其他的状态变量共同参与不变约束
+
+###### 禁止指令排序优化
+第二是禁止指令排序优化, 普通的变量仅仅会保证在该方法的执行过程中所有依赖复制结果的地方都能获取到正确的结果, 而不能保证变量赋值操作的顺序与程序代码中执行顺序一致; 因为在一个线程的方法执行过程中无法感知到这一点, 这也是 Java 内存模型中描述的所谓的 "线程内表现为串行的语义" (Within-Thread As-If-Serial Semantics)
+```
+Map ocnfigOptions;
+char[] configText;
+// 此变量必须定义为 volatile
+volatile boolean initialized = false;
+
+// 假设以下代码在线程 A 中执行, 模拟读取配置信息, 当读取完成后将 initialized 设置为 true 以通知其他线程配置可用
+configOptions = new HashMap();
+configText = readConfigFile(fileName);
+processConfigOptions(configText, configOptions);
+initialized = true;
+
+// 假设以下代码在线程 B 中执行, 等待 initialized 为 true, 代表线程 A 已经把配置信息初始化完成
+while (!initialized) {
+  sleep();
+}
+// 使用线程 A 中初始化好的配置信息
+doSomethingWithConfig();
+```
+如果定义 initialized 变量时没有使用 volatile 修饰, 就可能会由于指令重排序的优化, 导致位于线程 A 中最后一句代码的 "initialized  = true" 被提前执行 (这里虽然使用 Java 作为伪代码, 但所指的重排序优化是机器级的优化操作, 提前执行是指这句话对应的汇编代码被提前执行), 这样在线程 B 中使用配置的信息的代码就可能出现错误, 而 volatile 关键字则可以避免此类情况发生 (JDK 1.5 后)
