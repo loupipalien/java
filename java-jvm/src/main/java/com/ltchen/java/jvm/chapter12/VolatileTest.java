@@ -32,8 +32,6 @@ public class VolatileTest {
         // 等待所有线程结束
         while (Thread.activeCount() > 1) {
             Thread.yield();
-            Thread.
-            System.out.println(race);
         }
 
         System.out.println(race);
