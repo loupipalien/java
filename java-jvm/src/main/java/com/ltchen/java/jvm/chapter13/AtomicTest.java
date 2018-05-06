@@ -1,16 +1,18 @@
-package com.ltchen.java.jvm.chapter12;
+package com.ltchen.java.jvm.chapter13;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author : ltchen
- * @date : 2018/4/28
- * @desc : volatile 关键字测试
+ * @date : 2018/5/7
+ * @desc : Atomic 变量多线程下自增运算测试
  */
-public class VolatileTest {
+public class AtomicTest {
 
-    public static volatile int race = 0;
+    public static AtomicInteger race = new AtomicInteger(0);
 
     public static void increase() {
-        race++;
+        race.incrementAndGet();
     }
 
     private static final int THREADS_COUNT = 10;
